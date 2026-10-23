@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from '@playwright/test';
+import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
 
 const baseUrl = process.env.O9_BASE_URL ?? 'https://myvpp.o9solutions.com';
 const profileName = process.env.O9_PROFILE ?? 'Peng Demo';
@@ -10,30 +10,40 @@ const upstreamPath =
 const dashboardPath =
   '/kibo2#/OI%20Planning%20Master%20Data/OI%20Data%20Exception/Dashboard/Supply%20Chain%20Network';
 
-async function isVisible(locator: ReturnType<Page['locator']>) {
+async function isVisible(locator: Locator) {
   return locator.isVisible().catch(() => false);
 }
 
 async function completeMicrosoftLogin(page: Page, context: BrowserContext) {
   const appHost = new URL(baseUrl).host;
-  if (new URL(page.url()).host === appHost) {
+  const profileButton = page.getByRole('button', { name: /My Profile/i });
+  const email = page.locator('input[type="email"], input[name="loginfmt"]').first();
+  const password = page.locator('input[type="password"], input[name="passwd"]').first();
+
+  const initialState = await Promise.any([
+    profileButton.waitFor({ state: 'visible', timeout: 60_000 }).then(() => 'authenticated' as const),
+    email.waitFor({ state: 'visible', timeout: 60_000 }).then(() => 'email' as const),
+    password.waitFor({ state: 'visible', timeout: 60_000 }).then(() => 'password' as const),
+  ]).catch(() => {
+    throw new Error(`无法识别登录页面，当前地址：${page.url()}`);
+  });
+
+  if (initialState === 'authenticated') {
     return;
   }
 
-  const email = page.locator('input[type="email"], input[name="loginfmt"]').first();
-  if (await isVisible(email)) {
+  if (initialState === 'email') {
     const username = process.env.O9_USERNAME;
-    if (!username) {
+    if (!username || username === 'someone@example.com') {
       throw new Error('首次登录需要在 .env 中设置 O9_USERNAME。');
     }
     await email.fill(username);
     await page.locator('input[type="submit"], button:has-text("下一步"), button:has-text("Next")').first().click();
   }
 
-  const password = page.locator('input[type="password"], input[name="passwd"]').first();
-  if (await password.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true).catch(() => false)) {
+  if (await password.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true).catch(() => false)) {
     const secret = process.env.O9_PASSWORD;
-    if (!secret) {
+    if (!secret || secret === 'replace-with-your-new-password') {
       throw new Error('首次登录需要在 .env 中设置 O9_PASSWORD。');
     }
     await password.fill(secret);
