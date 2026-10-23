@@ -88,7 +88,26 @@ test('切换 O9 资料和租户并打开供应链网络图', async ({ page, cont
 
   await page.getByRole('button', { name: /My Profile/i }).click();
   await page.getByRole('button', { name: 'select', exact: true }).click();
-  await page.getByText(profileName, { exact: false }).last().click();
+
+  const profileSearch = page
+    .getByRole('searchbox', { name: /搜索|Search/i })
+    .filter({ visible: true })
+    .first();
+
+  if (!(await isVisible(profileSearch))) {
+    const username = process.env.O9_USERNAME;
+    if (!username || username === 'someone@example.com') {
+      throw new Error('选择资料时需要在 .env 中设置 O9_USERNAME。');
+    }
+
+    const accountCard = page.getByText(username, { exact: false }).filter({ visible: true }).first();
+    await expect(accountCard).toBeVisible();
+    await accountCard.click();
+  }
+
+  await expect(profileSearch).toBeVisible();
+  await profileSearch.fill(profileName);
+  await page.getByText(profileName, { exact: false }).filter({ visible: true }).last().click();
 
   await page.getByRole('button', { name: /更改个人资料图片|Change profile picture/i }).click();
   await page.getByRole('listbox', { name: /切换租户|Switch tenant/i }).click();
@@ -96,7 +115,7 @@ test('切换 O9 资料和租户并打开供应链网络图', async ({ page, cont
   await page.getByRole('button', { name: /好的|OK/i }).click();
 
   await page.goto(`${baseUrl}${dashboardPath}`, { waitUntil: 'domcontentloaded' });
-  const search = page.getByRole('searchbox', { name: /搜索|Search/i });
+  const search = page.getByRole('searchbox', { name: /搜索|Search/i }).filter({ visible: true }).first();
   await expect(search).toBeVisible();
   await search.click();
   await page.getByText(exceptionName, { exact: false }).click();
