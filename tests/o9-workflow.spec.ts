@@ -18,6 +18,31 @@ async function isVisible(locator: Locator) {
   return locator.isVisible().catch(() => false);
 }
 
+async function findVisibleInContext(
+  context: BrowserContext,
+  locatorFor: (candidate: Page) => Locator,
+  timeout = 30_000,
+) {
+  const deadline = Date.now() + timeout;
+
+  while (Date.now() < deadline) {
+    for (const candidate of context.pages().toReversed()) {
+      if (candidate.isClosed()) {
+        continue;
+      }
+
+      const locator = locatorFor(candidate);
+      if (await isVisible(locator)) {
+        return { page: candidate, locator };
+      }
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+
+  return undefined;
+}
+
 async function completeMicrosoftLogin(page: Page, context: BrowserContext) {
   const appHost = new URL(baseUrl).host;
   const profileButton = page.getByRole('button', { name: /My Profile/i });
@@ -91,41 +116,71 @@ test('切换 O9 资料和租户并打开供应链网络图', async ({ page, cont
   await expect(page).toHaveURL(new RegExp(baseUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   await page.getByRole('button', { name: /My Profile/i }).click();
-  await page.getByRole('button', { name: 'select', exact: true }).click();
+  const selectTarget = await findVisibleInContext(
+    context,
+    (candidate) => candidate.getByRole('button', { name: /^select$/i }).filter({ visible: true }).first(),
+  );
+  if (!selectTarget) {
+    throw new Error('点击 My Profile 后，没有找到资料选择按钮。');
+  }
+  await selectTarget.locator.click();
 
-  const profileOption = page
-    .getByText(new RegExp(`^${escapeRegExp(profileName)}(?:\\s*\\(\\d+\\))?$`, 'i'))
-    .filter({ visible: true })
-    .last();
+  const profilePattern = new RegExp(`^${escapeRegExp(profileName)}(?:\\s*\\(\\d+\\))?$`, 'i');
+  let profileTarget = await findVisibleInContext(
+    context,
+    (candidate) => candidate.getByText(profilePattern).filter({ visible: true }).last(),
+    2_000,
+  );
 
-  if (!(await isVisible(profileOption))) {
+  if (!profileTarget) {
     const username = process.env.O9_USERNAME;
     if (!username || username === 'someone@example.com') {
       throw new Error('选择资料时需要在 .env 中设置 O9_USERNAME。');
     }
 
-    const accountCard = page.getByText(username, { exact: false }).filter({ visible: true }).first();
-    await expect(accountCard).toBeVisible();
-    await accountCard.click();
+    const accountTarget = await findVisibleInContext(context, (candidate) =>
+      candidate.getByText(username, { exact: false }).filter({ visible: true }).first(),
+    );
+    if (!accountTarget) {
+      throw new Error(`资料选择器中没有找到当前账号：${username}`);
+    }
+    await accountTarget.locator.click();
+
+    profileTarget = await findVisibleInContext(context, (candidate) =>
+      candidate.getByText(profilePattern).filter({ visible: true }).last(),
+    );
   }
 
-  await expect(profileOption).toBeVisible({ timeout: 30_000 });
-  await profileOption.click();
+  if (!profileTarget) {
+    throw new Error(`资料选择器中没有找到资料：${profileName}`);
+  }
+  await profileTarget.locator.click();
 
-  await page.getByRole('button', { name: /更改个人资料图片|Change profile picture/i }).click();
-  await page.getByRole('listbox', { name: /切换租户|Switch tenant/i }).click();
-  await page.getByText(tenantName, { exact: true }).last().click();
-  await page.getByRole('button', { name: /好的|OK/i }).click();
+  const profileMenuTarget = await findVisibleInContext(context, (candidate) =>
+    candidate
+      .getByRole('button', { name: /更改个人资料图片|Change profile picture/i })
+      .filter({ visible: true })
+      .first(),
+  );
+  if (!profileMenuTarget) {
+    throw new Error('切换资料后，没有找到个人资料菜单。');
+  }
 
-  await page.goto(`${baseUrl}${dashboardPath}`, { waitUntil: 'domcontentloaded' });
-  const search = page.getByRole('searchbox', { name: /搜索|Search/i }).filter({ visible: true }).first();
+  const activePage = profileMenuTarget.page;
+  await profileMenuTarget.locator.click();
+  await activePage.getByRole('listbox', { name: /切换租户|Switch tenant/i }).click();
+  await activePage.getByText(tenantName, { exact: true }).last().click();
+  await activePage.getByRole('button', { name: /好的|OK/i }).click();
+
+  await activePage.goto(`${baseUrl}${dashboardPath}`, { waitUntil: 'domcontentloaded' });
+  const search = activePage.getByRole('searchbox', { name: /搜索|Search/i }).filter({ visible: true }).first();
   await expect(search).toBeVisible();
   await search.click();
-  await page.getByText(exceptionName, { exact: false }).click();
-  await page.getByText(/Network Graph and Supply/i).click();
-  await page.getByRole('button', { name: /关闭|Close/i }).click();
+  await activePage.getByText(exceptionName, { exact: false }).click();
+  await activePage.getByText(/Network Graph and Supply/i).click();
+  await activePage.getByRole('button', { name: /关闭|Close/i }).click();
 
-  const fullScreen = page.locator('.o9con.o9con-full-screen');
+  const fullScreen = activePage.locator('.o9con.o9con-full-screen');
   await expect(fullScreen).toBeVisible();
   await fullScreen.click();
 });
