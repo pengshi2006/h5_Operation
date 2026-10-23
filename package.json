@@ -1,0 +1,15 @@
+{
+  "name": "h5-operation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "install:browser": "playwright install chromium",
+    "codegen": "playwright codegen",
+    "codegen:save": "playwright codegen --output=tests/generated.spec.ts",
+    "check": "playwright --version"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}
