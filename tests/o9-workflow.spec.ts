@@ -10,6 +10,10 @@ const upstreamPath =
 const dashboardPath =
   '/kibo2#/OI%20Planning%20Master%20Data/OI%20Data%20Exception/Dashboard/Supply%20Chain%20Network';
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 async function isVisible(locator: Locator) {
   return locator.isVisible().catch(() => false);
 }
@@ -89,12 +93,12 @@ test('切换 O9 资料和租户并打开供应链网络图', async ({ page, cont
   await page.getByRole('button', { name: /My Profile/i }).click();
   await page.getByRole('button', { name: 'select', exact: true }).click();
 
-  const profileSearch = page
-    .getByRole('searchbox', { name: /搜索|Search/i })
+  const profileOption = page
+    .getByText(new RegExp(`^${escapeRegExp(profileName)}(?:\\s*\\(\\d+\\))?$`, 'i'))
     .filter({ visible: true })
-    .first();
+    .last();
 
-  if (!(await isVisible(profileSearch))) {
+  if (!(await isVisible(profileOption))) {
     const username = process.env.O9_USERNAME;
     if (!username || username === 'someone@example.com') {
       throw new Error('选择资料时需要在 .env 中设置 O9_USERNAME。');
@@ -105,9 +109,8 @@ test('切换 O9 资料和租户并打开供应链网络图', async ({ page, cont
     await accountCard.click();
   }
 
-  await expect(profileSearch).toBeVisible();
-  await profileSearch.fill(profileName);
-  await page.getByText(profileName, { exact: false }).filter({ visible: true }).last().click();
+  await expect(profileOption).toBeVisible({ timeout: 30_000 });
+  await profileOption.click();
 
   await page.getByRole('button', { name: /更改个人资料图片|Change profile picture/i }).click();
   await page.getByRole('listbox', { name: /切换租户|Switch tenant/i }).click();
