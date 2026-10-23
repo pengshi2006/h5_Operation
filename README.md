@@ -45,3 +45,26 @@ Codegen 需要图形桌面；在无 GUI 的服务器或容器里，请在本地�
 npm run check
 npm run codegen -- --help
 ```
+
+## 执行录制生成的 O9 流程
+
+复制环境变量模板，并在本机填写新密码：
+
+```bat
+copy .env.example .env
+notepad .env
+```
+
+首次执行建议使用有界面模式，以便手动完成 Microsoft MFA：
+
+```bash
+npm run test:workflow
+```
+
+成功登录后会把会话保存到 `auth/user.json`。后续可直接运行：
+
+```bash
+npm test
+```
+
+`.env` 和登录会话文件均已被 Git 忽略，不会提交到仓库。
